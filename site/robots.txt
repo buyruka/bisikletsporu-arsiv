@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /wp-admin/
+Allow: /wp-admin/admin-ajax.php
+
+Sitemap: https://www.bisikletsporu.com/wp-sitemap.xml
+
+Sitemap: http://www.bisikletsporu.com/sitemap.xml
