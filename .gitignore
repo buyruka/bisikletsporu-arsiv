@@ -1,0 +1,5 @@
+crawl/
+crawl.log
+oversize/
+dl/
+__pycache__/

@@ -1,0 +1,35 @@
+name: Publish the podcast audio
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/podcast.yml', 'podcast/episodes.tsv']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download every episode from the old server and check its exact size
+        run: |
+          mkdir -p dl
+          while IFS=$'\t' read -r name size; do
+            [ -z "${name:-}" ] && continue
+            curl -fsSL --retry 5 --retry-delay 15 -A "Mozilla/5.0 site-owner-archive" \
+              -o "dl/$name" "https://www.bisikletsporu.com/dosyalar/podcast/$name"
+            got=$(stat -c %s "dl/$name")
+            if [ "$got" != "$size" ]; then echo "::error::$name is $got bytes, expected $size"; exit 1; fi
+            echo "ok  $name  $got bytes"
+          done < podcast/episodes.tsv
+          echo "downloaded $(ls dl | wc -l) episodes"
+      - name: Publish them as the "podcast" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view podcast >/dev/null 2>&1 || gh release create podcast \
+            --title "Bisiklet Sporu Podcast - arşiv (2012-2014)" \
+            --notes "Bisiklet Sporu podcast'inin 33 bölümünün MP3 dosyaları. Eski bisikletsporu.com/dosyalar/podcast/ adresleri bu dosyalara yönlendirilir."
+          gh release upload podcast dl/*.mp3 --clobber
+          echo "assets in release: $(gh release view podcast --json assets --jq '.assets | length')"

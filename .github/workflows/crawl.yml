@@ -1,0 +1,65 @@
+name: Archive www.bisikletsporu.com
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/crawl.yml', 'scripts/**']
+permissions:
+  contents: write
+concurrency:
+  group: crawl
+  cancel-in-progress: false
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      START_URLS: >-
+        https://www.bisikletsporu.com/
+        https://www.bisikletsporu.com/feed/
+        https://www.bisikletsporu.com/feed/podcast/
+        https://www.bisikletsporu.com/comments/feed/
+        https://www.bisikletsporu.com/sitemap.xml
+        https://www.bisikletsporu.com/robots.txt
+      DOMAINS: www.bisikletsporu.com,bisikletsporu.com
+      HOSTS: www.bisikletsporu.com,bisikletsporu.com
+      ORIGIN: https://www.bisikletsporu.com
+      KEEP_FEEDS: /feed/,/feed/podcast/,/comments/feed/
+      SEARCH_SITE: bisikletsporu.com
+      REDIRECTS: |
+        /dosyalar/podcast/* https://github.com/buyruka/bisikletsporu-arsiv/releases/download/podcast/:splat 302
+      HEADERS: |
+        /feed/
+          Content-Type: application/rss+xml; charset=UTF-8
+        /feed/*
+          Content-Type: application/rss+xml; charset=UTF-8
+        /comments/feed/
+          Content-Type: application/rss+xml; charset=UTF-8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the old server answers
+        run: curl -sS -o /dev/null -w "homepage HTTP %{http_code}, %{size_download} bytes\n" -A "Mozilla/5.0 site-owner-archive" https://www.bisikletsporu.com/
+      - name: Mirror the site (takes a while, polite pace)
+        run: bash scripts/crawl.sh
+      - name: Keep the site's own "page not found" page
+        run: |
+          mkdir -p crawl/www.bisikletsporu.com
+          curl -sS -A "Mozilla/5.0 site-owner-archive" -o crawl/www.bisikletsporu.com/404.html https://www.bisikletsporu.com/bu-sayfa-yok-404-arsiv/ || true
+      - name: Turn the mirror into a static site
+        run: python3 scripts/postprocess.py
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crawl-logs
+          path: |
+            crawl.log
+            crawl-report.md
+            oversize/
+      - name: Commit the archive
+        run: |
+          git config user.name "archive-bot"
+          git config user.email "archive-bot@users.noreply.github.com"
+          git add site crawl-report.md
+          git commit -q -m "Static archive of www.bisikletsporu.com ($(date -u +%Y-%m-%d))" || echo "nothing new to commit"
+          git push
