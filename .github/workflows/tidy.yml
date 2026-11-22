@@ -1,0 +1,39 @@
+name: Real feeds and tidy-up (no re-crawl)
+# One-off fix for an archive that is already in site/. A full re-crawl does the same steps itself.
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: crawl
+  cancel-in-progress: false
+jobs:
+  tidy:
+    runs-on: ubuntu-latest
+    env:
+      HOSTS: www.bisikletsporu.com,bisikletsporu.com
+    steps:
+      - uses: actions/checkout@v4
+      - name: Save the real RSS feeds (not the FeedBurner copies)
+        run: bash scripts/fetch_feeds.sh site
+      - name: Put every post at its own address
+        run: python3 scripts/fix_canonical.py
+      - name: Send the old /feed/podcast/ address to the real podcast feed
+        run: |
+          rm -rf site/feed/podcast
+          grep -q '^/feed/podcast/ ' site/_redirects || printf '%s\n' \
+            '/feed/podcast/ /category/podcast/feed/ 301' '/feed/podcast /category/podcast/feed/ 301' >> site/_redirects
+          grep -qx '/category/podcast/feed/' site/_headers || printf '%s\n' \
+            '/category/podcast/feed/' '  Content-Type: application/rss+xml; charset=UTF-8' >> site/_headers
+          cat site/_redirects site/_headers
+      - name: Remove the comment form (it cannot work on a static site)
+        env:
+          REMOVE_COMMENT_FORM: "1"
+        run: python3 scripts/strip_spam.py
+      - name: Commit
+        run: |
+          git config user.name "archive-bot"
+          git config user.email "archive-bot@users.noreply.github.com"
+          git add -A site crawl-report.md
+          git commit -q -m "Real RSS feeds, podcast feed redirect, comment form removed" || echo "nothing to commit"
+          git push

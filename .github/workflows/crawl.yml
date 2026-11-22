@@ -17,23 +17,27 @@ jobs:
       START_URLS: >-
         https://www.bisikletsporu.com/
         https://www.bisikletsporu.com/feed/
-        https://www.bisikletsporu.com/feed/podcast/
         https://www.bisikletsporu.com/comments/feed/
         https://www.bisikletsporu.com/sitemap.xml
         https://www.bisikletsporu.com/robots.txt
       DOMAINS: www.bisikletsporu.com,bisikletsporu.com
       HOSTS: www.bisikletsporu.com,bisikletsporu.com
       ORIGIN: https://www.bisikletsporu.com
-      KEEP_FEEDS: /feed/,/feed/podcast/,/comments/feed/
+      # /category/podcast/feed/ is the real podcast feed; the old /feed/podcast/ only led to the Podcast page.
+      KEEP_FEEDS: /feed/,/comments/feed/,/category/podcast/feed/
       SEARCH_SITE: bisikletsporu.com
       REDIRECTS: |
         /dosyalar/podcast/* https://github.com/buyruka/bisikletsporu-arsiv/releases/download/podcast/:splat 302
+        /feed/podcast/ /category/podcast/feed/ 301
+        /feed/podcast /category/podcast/feed/ 301
       HEADERS: |
         /feed/
           Content-Type: application/rss+xml; charset=UTF-8
         /feed/*
           Content-Type: application/rss+xml; charset=UTF-8
         /comments/feed/
+          Content-Type: application/rss+xml; charset=UTF-8
+        /category/podcast/feed/
           Content-Type: application/rss+xml; charset=UTF-8
     steps:
       - uses: actions/checkout@v4
@@ -45,8 +49,16 @@ jobs:
         run: |
           mkdir -p crawl/www.bisikletsporu.com
           curl -sS -A "Mozilla/5.0 site-owner-archive" -o crawl/www.bisikletsporu.com/404.html https://www.bisikletsporu.com/bu-sayfa-yok-404-arsiv/ || true
+      - name: Save the real RSS feeds (not the FeedBurner copies)
+        run: bash scripts/fetch_feeds.sh crawl/www.bisikletsporu.com
       - name: Turn the mirror into a static site
         run: python3 scripts/postprocess.py
+      - name: Put every post at its own address
+        run: python3 scripts/fix_canonical.py
+      - name: Remove the comment form (it cannot work on a static site)
+        env:
+          REMOVE_COMMENT_FORM: "1"
+        run: python3 scripts/strip_spam.py
       - name: Keep the logs
         if: always()
         uses: actions/upload-artifact@v4
