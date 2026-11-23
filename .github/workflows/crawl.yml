@@ -55,6 +55,8 @@ jobs:
         run: python3 scripts/postprocess.py
       - name: Put every post at its own address
         run: python3 scripts/fix_canonical.py
+      - name: Add a player under each podcast episode link
+        run: python3 scripts/add_audio_players.py
       - name: Remove the comment form (it cannot work on a static site)
         env:
           REMOVE_COMMENT_FORM: "1"
