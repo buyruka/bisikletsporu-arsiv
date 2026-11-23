@@ -1,0 +1,61 @@
+name: Add specific pages to the archive (no re-crawl)
+# For pages that exist on the old site but are not linked from anywhere, so the crawl never found them.
+on:
+  workflow_dispatch:
+    inputs:
+      paths:
+        description: Space-separated paths to add, for example /2013-takim-formalari/
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: crawl
+  cancel-in-progress: false
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    env:
+      HOSTS: www.bisikletsporu.com,bisikletsporu.com
+      ORIGIN: https://www.bisikletsporu.com
+      KEEP_FEEDS: /feed/,/comments/feed/,/category/podcast/feed/
+      SEARCH_SITE: bisikletsporu.com
+      PATHS: ${{ inputs.paths }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy the pages and everything they show into a scratch folder
+        run: |
+          mkdir -p /tmp/extra && cd /tmp/extra
+          urls=""; for p in $PATHS; do urls="$urls ${ORIGIN}${p}"; done
+          wget --page-requisites --adjust-extension --span-hosts --domains="$HOSTS" -e robots=off \
+            --wait=0.3 --random-wait --tries=3 --timeout=60 --no-verbose --reject-regex='\.mp3$' \
+            --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36 site-owner-archive" \
+            --directory-prefix=crawl $urls || true
+          echo "downloaded $(find crawl -type f | wc -l) files"
+      - name: Turn them into static pages the same way as the rest
+        run: cd /tmp/extra && python3 "$GITHUB_WORKSPACE/scripts/postprocess.py"
+      - name: Add only files the archive does not have yet
+        run: |
+          python3 - <<'EOF'
+          import pathlib, shutil
+          src, dst, n = pathlib.Path('/tmp/extra/site'), pathlib.Path('site'), 0
+          for p in src.rglob('*'):
+              if p.is_file() and p.name not in ('_redirects', '_headers'):
+                  t = dst / p.relative_to(src)
+                  if not t.exists():
+                      t.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copy2(p, t)
+                      n += 1
+          print('added', n, 'new files')
+          EOF
+          for p in $PATHS; do test -f "site${p}index.html" && echo "ok $p" || { echo "MISSING $p"; exit 1; }; done
+      - name: Remove the comment form, as on the other pages
+        env:
+          REMOVE_COMMENT_FORM: "1"
+        run: python3 scripts/strip_spam.py
+      - name: Commit
+        run: |
+          git config user.name "archive-bot"
+          git config user.email "archive-bot@users.noreply.github.com"
+          git add -A site crawl-report.md
+          git commit -q -m "Add pages that nothing linked to: $PATHS" || echo "nothing to commit"
+          git push
