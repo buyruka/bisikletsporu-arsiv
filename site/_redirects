@@ -1,1 +1,3 @@
 /dosyalar/podcast/* https://github.com/buyruka/bisikletsporu-arsiv/releases/download/podcast/:splat 302
+/feed/podcast/ /category/podcast/feed/ 301
+/feed/podcast /category/podcast/feed/ 301

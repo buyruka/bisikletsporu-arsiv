@@ -4,3 +4,5 @@
   Content-Type: application/rss+xml; charset=UTF-8
 /comments/feed/
   Content-Type: application/rss+xml; charset=UTF-8
+/category/podcast/feed/
+  Content-Type: application/rss+xml; charset=UTF-8
